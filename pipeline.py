@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+from datetime import datetime
+
+from config import AppConfig
+from src.core import database as db
+from src.core.dashboard import write_dashboard
+from src.core.discovery import resolve_careers_url
+from src.core.extractor import extract_company_targets
+from src.core.filtering import is_engineering_job
+from src.core.http_client import build_http_client
+from src.core.logging_utils import setup_logging
+from src.core.models import JobPosting, RunStats
+from src.core.utils import build_job_id, normalize_text
+from src.scrapers.registry import fetch_jobs_for_company
+
+
+def run_update(cfg: AppConfig) -> RunStats:
+    logger = setup_logging(cfg.logs_dir)
+    stats = RunStats()
+    scan_start = datetime.now()
+
+    logger.info("Run started")
+    logger.info("Input workbook: %s", cfg.source_workbook)
+    logger.info("Dashboard output: %s", cfg.output_workbook)
+    logger.info("Database: %s", cfg.database_path)
+
+    targets = extract_company_targets(str(cfg.source_workbook), cfg.workbook_mapping)
+    if cfg.max_companies is not None:
+        targets = targets[: cfg.max_companies]
+
+    stats.companies_checked = len(targets)
+    logger.info("Companies extracted: %d", len(targets))
+
+    http_client = build_http_client(
+        headers=cfg.default_headers,
+        timeout_seconds=cfg.request_timeout_seconds,
+        delay_seconds=cfg.request_delay_seconds,
+    )
+
+    all_jobs: list[JobPosting] = []
+    conn = db.connect_db(cfg.database_path)
+    db.init_db(conn)
+
+    try:
+        for target in targets:
+            try:
+                careers_url = resolve_careers_url(target, conn, http_client, logger, cfg.discovery)
+                if not careers_url:
+                    logger.warning("No careers URL resolved for %s at row %s", target.company, target.source_row)
+                    continue
+
+                scraped = fetch_jobs_for_company(
+                    target.company,
+                    careers_url,
+                    http_client,
+                    logger,
+                    use_browser_fallback=cfg.use_playwright_fallback,
+                    headless=cfg.headless_browser,
+                    timeout_ms=cfg.browser_timeout_ms,
+                )
+                for s in scraped:
+                    title = normalize_text(s.title)
+                    if not title:
+                        continue
+                    if not is_engineering_job(title=title, keywords=cfg.engineering_keywords, description=s.description):
+                        continue
+
+                    url = normalize_text(s.url)
+                    if not url:
+                        continue
+                    location = normalize_text(s.location)
+                    employment = normalize_text(s.employment_type)
+                    job_id = build_job_id(target.company, title, location, url)
+                    all_jobs.append(
+                        JobPosting(
+                            job_id=job_id,
+                            company=target.company,
+                            title=title,
+                            location=location,
+                            employment_type=employment,
+                            url=url,
+                            first_seen=scan_start,
+                            last_seen=scan_start,
+                            active=True,
+                        )
+                    )
+            except Exception as exc:
+                stats.errors_encountered += 1
+                logger.exception(
+                    "Failed processing company %s at row %s (%s): %s",
+                    target.company,
+                    target.source_row,
+                    target.careers_url,
+                    exc,
+                )
+
+        # Deduplicate within run by job_id.
+        deduped: dict[str, JobPosting] = {job.job_id: job for job in all_jobs}
+        jobs_this_run = list(deduped.values())
+        stats.jobs_found_this_run = len(jobs_this_run)
+
+        stats.new_jobs_this_run, seen_ids = db.upsert_jobs(conn, jobs_this_run, scan_start)
+        stats.jobs_marked_inactive = db.mark_inactive_missing(conn, seen_ids)
+        stats.total_active_jobs = db.get_total_active_jobs(conn)
+        stats.last_scan_date = scan_start.isoformat(timespec="seconds")
+
+        write_dashboard(conn, cfg.output_workbook, stats)
+    finally:
+        conn.close()
+
+    logger.info("Run finished")
+    logger.info("End time: %s", datetime.now().isoformat(timespec="seconds"))
+    logger.info("Companies checked: %d", stats.companies_checked)
+    logger.info("Jobs found: %d", stats.jobs_found_this_run)
+    logger.info("New jobs: %d", stats.new_jobs_this_run)
+    logger.info("Jobs marked inactive: %d", stats.jobs_marked_inactive)
+    logger.info("Errors encountered: %d", stats.errors_encountered)
+
+    return stats
