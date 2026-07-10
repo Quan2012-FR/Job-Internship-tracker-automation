@@ -7,8 +7,10 @@ This project treats your source workbook as read-only input and generates a sepa
 ## Features
 
 - Reads company and careers URLs from an Excel workbook in read-only mode.
+- Supports company-name-only rows with best-effort careers URL discovery and SQLite caching.
 - Supports platform scrapers for Workday, Greenhouse, Lever, iCIMS, and Taleo.
 - Uses structured endpoints when available, with fallback JSON-LD extraction.
+- Optional Playwright fallback can render JavaScript-heavy career pages when static scraping finds no jobs.
 - Filters only engineering-related positions with centralized keyword rules.
 - Stores job history in SQLite to avoid duplicates and track active/inactive state.
 - Generates a separate dashboard workbook with weekly review and summary sheets.
@@ -67,6 +69,7 @@ python -m venv .venv
 
 ```powershell
 pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
 ### macOS / Linux
@@ -84,6 +87,7 @@ source .venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
 ## Usage
@@ -100,6 +104,32 @@ Optional output and database paths:
 python update_jobs.py --input companies.xlsx --output engineering_job_dashboard.xlsx --database jobs.db
 ```
 
+Custom workbook mapping:
+
+```bash
+python update_jobs.py --input companies.xlsx --sheet Tabelle1 --company-column Company --url-column "Apply where"
+```
+
+Company-name-only discovery and JavaScript fallback controls:
+
+```bash
+python update_jobs.py --input companies.xlsx --playwright-fallback --max-companies 25
+```
+
+Useful flags:
+
+- `--sheet`: worksheet name to read.
+- `--company-column`: exact header for the company name column.
+- `--url-column`: exact header for the optional careers URL column.
+- `--max-companies`: limit the number of companies processed in a run.
+- `--no-discovery`: require workbook URLs and skip careers URL discovery.
+- `--no-search-fallback`: skip search-engine based discovery fallback.
+- `--cache-ttl-days`: days to trust a successful cached careers URL.
+- `--revalidate-after-days`: days before revalidating a cached URL when used.
+- `--max-discovery-candidates`: maximum generated candidate URLs to probe per company.
+- `--playwright-fallback`: render pages with Playwright if static scraping finds no jobs.
+- `--show-browser`: show the browser window when Playwright fallback is enabled.
+
 ## Source Workbook Expectations
 
 The source workbook is read-only input and is never modified.
@@ -107,9 +137,22 @@ The source workbook is read-only input and is never modified.
 Expected fields:
 
 - Company name column (for example: Company, Employer)
-- Careers URL column (for example: Apply where, Careers URL, Job URL)
+- Optional careers URL column (for example: Apply where, Careers URL, Job URL)
 
-The extractor auto-detects common header names and can be customized in config.py using WorkbookMapping.
+The extractor auto-detects common header names and can be customized with CLI flags or in config.py using WorkbookMapping. If a careers URL is blank or the URL column is missing, the tool can attempt local best-effort discovery from generated candidate URLs and a search fallback.
+
+## Careers URL Cache
+
+SQLite stores discovered and workbook-provided careers URLs in `career_url_cache`:
+
+- company
+- careers_url
+- platform
+- last_validated
+- last_success
+- source
+
+Successful cached URLs are reused across runs until the configured TTL expires. Stale cached URLs are revalidated before fresh discovery is attempted.
 
 ## Dashboard Output
 
@@ -163,6 +206,7 @@ Behavior:
 - Lever
 - iCIMS
 - Taleo
+- Generic JSON-LD and rendered-page fallback
 
 Design is modular for adding more platforms.
 

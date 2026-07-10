@@ -81,20 +81,19 @@ def extract_company_targets(path: str, mapping: WorkbookMapping) -> list[Company
             continue
 
         company_idx, url_idx = _find_header_indexes(header_row, mapping)
-        if company_idx is None or url_idx is None:
+        if company_idx is None:
             continue
 
         header_names = [normalize_text(str(v) if v is not None else "") for v in header_row]
         for row_number, row in enumerate(rows, start=2):
             company_raw = row[company_idx] if company_idx < len(row) else None
-            url_raw = row[url_idx] if url_idx < len(row) else None
+            url_raw = row[url_idx] if url_idx is not None and url_idx < len(row) else None
 
             url = extract_first_url(str(url_raw) if url_raw is not None else "")
-            if not url:
-                continue
-
             company = normalize_text(str(company_raw) if company_raw is not None else "")
             if not company:
+                if not url:
+                    continue
                 company = fallback_company_from_url(url)
 
             key = (company.lower(), url.lower())
@@ -107,7 +106,7 @@ def extract_company_targets(path: str, mapping: WorkbookMapping) -> list[Company
                 if i >= len(header_names):
                     continue
                 header = header_names[i]
-                if not header or i in (company_idx, url_idx):
+                if not header or i == company_idx or i == url_idx:
                     continue
                 text = normalize_text(str(value) if value is not None else "")
                 if text:

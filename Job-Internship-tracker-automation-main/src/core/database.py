@@ -31,6 +31,55 @@ def init_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(active)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_last_seen ON jobs(last_seen)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS career_url_cache (
+            company TEXT PRIMARY KEY,
+            careers_url TEXT NOT NULL,
+            platform TEXT,
+            last_validated TEXT NOT NULL,
+            last_success INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_career_url_cache_success ON career_url_cache(last_success)")
+    conn.commit()
+
+
+def get_cached_career_url(conn: sqlite3.Connection, company: str) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT company, careers_url, platform, last_validated, last_success, source
+        FROM career_url_cache
+        WHERE lower(company) = lower(?)
+        """,
+        (company,),
+    ).fetchone()
+
+
+def upsert_career_url_cache(
+    conn: sqlite3.Connection,
+    company: str,
+    careers_url: str,
+    platform: str,
+    validated_at: datetime,
+    last_success: bool,
+    source: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO career_url_cache (company, careers_url, platform, last_validated, last_success, source)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(company) DO UPDATE SET
+            careers_url = excluded.careers_url,
+            platform = excluded.platform,
+            last_validated = excluded.last_validated,
+            last_success = excluded.last_success,
+            source = excluded.source
+        """,
+        (company, careers_url, platform, validated_at.isoformat(), 1 if last_success else 0, source),
+    )
     conn.commit()
 
 
