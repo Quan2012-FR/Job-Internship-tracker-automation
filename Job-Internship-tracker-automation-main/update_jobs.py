@@ -31,6 +31,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url-column", help="Header name for the optional careers URL column.")
     parser.add_argument("--max-companies", type=int, help="Limit how many companies are processed in this run.")
     parser.add_argument(
+        "--categories",
+        help="Comma-separated keyword categories to search, such as engineering,medical,business,rn.",
+    )
+    parser.add_argument(
+        "--keywords",
+        help="Comma-separated custom keywords to add to the selected categories.",
+    )
+    parser.add_argument(
         "--no-discovery",
         action="store_true",
         help="Do not discover careers URLs when the workbook URL is missing.",
@@ -90,6 +98,8 @@ def main() -> int:
             search_fallback=not args.no_search_fallback,
         ),
         max_companies=args.max_companies,
+        active_keyword_categories=_split_csv(args.categories) if args.categories else None,
+        custom_keywords=_split_csv(args.keywords) if args.keywords else None,
         use_playwright_fallback=args.playwright_fallback,
         headless_browser=not args.show_browser,
     )
@@ -103,6 +113,10 @@ def main() -> int:
     print(f"Total active jobs: {stats.total_active_jobs}")
     print(f"Dashboard written: {Path(cfg.output_workbook)}")
     return 0
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 if __name__ == "__main__":

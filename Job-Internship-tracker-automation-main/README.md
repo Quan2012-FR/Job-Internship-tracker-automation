@@ -167,7 +167,7 @@ The dashboard contains the jobs found during the scan and allows you to track ap
 * Uses structured job endpoints when available.
 * Falls back to JSON-LD extraction for other career pages.
 * Can optionally use Playwright for JavaScript-heavy websites.
-* Filters results to engineering-related positions.
+* Filters results using configurable broad and role-specific keyword categories.
 * Stores job history and prevents duplicate entries.
 * Tracks whether jobs are active or inactive.
 * Scores jobs based on urgency, recency, engineering relevance, employment type, company preference, and location preference.
@@ -249,6 +249,8 @@ python update_jobs.py --input companies.xlsx --sheet Tabelle1 --company-column C
 | `--company-column`           | Exact header used for company names.                            |
 | `--url-column`               | Exact header used for career-page URLs.                         |
 | `--max-companies`            | Limits how many companies are processed.                        |
+| `--categories`               | Comma-separated keyword categories to search.                   |
+| `--keywords`                 | Comma-separated custom keywords added to the selected categories. |
 | `--no-discovery`             | Requires workbook URLs and disables career-page discovery.      |
 | `--no-search-fallback`       | Disables the search-engine discovery fallback.                  |
 | `--cache-ttl-days`           | Number of days a successful cached career URL remains trusted.  |
@@ -529,6 +531,7 @@ Available settings include:
 * `FULLTIME_WEIGHT`
 * `DEADLINE_WEIGHT`
 * `RECENCY_WEIGHT`
+* `KEYWORD_MATCH_WEIGHT`
 * `ENGINEERING_MATCH_WEIGHT`
 * `COMPANY_PREFERENCE_WEIGHT`
 * `LOCATION_PREFERENCE_WEIGHT`
@@ -541,23 +544,49 @@ Beginners can leave the default values unchanged.
 
 ---
 
-# Engineering Job Filtering
+# Job Keyword Filtering
 
-The tracker uses centralized keyword rules to decide whether a position is engineering-related.
+The tracker uses centralized keyword rules to decide whether a position matches your search focus.
 
-These rules can include terms connected to areas such as:
+By default, it searches the `engineering` category. You can change the active categories in `config.py` or pass them from the command line.
 
-* Mechanical engineering
-* Manufacturing
-* Design
-* Controls
-* Mechatronics
-* Aerospace
-* Automotive
-* Robotics
-* Quality engineering
-* Test engineering
-* Process engineering
+Broad categories include:
+
+* `engineering`
+* `medical`
+* `business`
+
+Role-specific categories include:
+
+* `chemical_engineer`
+* `manufacturing_engineer`
+* `rn`
+* `construction_laborer`
+
+Category names can be written with underscores, hyphens, or spaces. For example, `manufacturing_engineer`, `manufacturing-engineer`, and `manufacturing engineer` are treated the same.
+
+Examples:
+
+```bash
+python update_jobs.py --input companies.xlsx --categories engineering,manufacturing_engineer
+```
+
+```bash
+python update_jobs.py --input companies.xlsx --categories medical,rn --keywords phlebotomy,telehealth
+```
+
+```bash
+python update_jobs.py --input companies.xlsx --categories business --keywords "product manager,customer success"
+```
+
+In `config.py`, edit:
+
+```python
+ACTIVE_KEYWORD_CATEGORIES = ["engineering"]
+CUSTOM_KEYWORDS = []
+```
+
+To add or change built-in categories, edit `DEFAULT_KEYWORD_CATEGORIES`.
 
 Review the keyword settings if relevant jobs are being excluded or unrelated jobs are being included.
 
@@ -698,7 +727,7 @@ python update_jobs.py --input companies.xlsx
 
 ### `config.py`
 
-Contains settings for job filtering, workbook mapping, and Priority Score weights.
+Contains settings for job filtering categories, custom keywords, workbook mapping, and Priority Score weights.
 
 ### `requirements.txt`
 
@@ -815,7 +844,7 @@ Check the following:
 * Make sure the career-page URLs are valid.
 * Open the URLs manually in your browser.
 * Check your internet connection.
-* Review the engineering keyword list in `config.py`.
+* Review the keyword categories and custom keyword list in `config.py`.
 * Enable Playwright fallback.
 * Review the daily log file.
 * Confirm the website does not require a login.

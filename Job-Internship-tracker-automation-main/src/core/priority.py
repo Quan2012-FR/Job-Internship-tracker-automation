@@ -36,7 +36,7 @@ def score_job(job: JobPosting, description: str, keywords: list[str], cfg: AppCo
     factors = [
         (cfg.deadline_weight, _deadline_factor(job.days_remaining)),
         (cfg.recency_weight, _recency_factor(job.first_seen, now)),
-        (cfg.engineering_match_weight, _engineering_match_factor(job.title, description, keywords)),
+        (cfg.keyword_match_weight, _engineering_match_factor(job.title, description, keywords)),
         (cfg.internship_weight, _term_factor(job, ("intern", "internship", "co-op", "coop"))),
         (cfg.fulltime_weight, _term_factor(job, ("full-time", "full time", "fulltime", "new grad"))),
     ]

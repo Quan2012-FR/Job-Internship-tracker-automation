@@ -24,6 +24,73 @@ DEFAULT_ENGINEERING_KEYWORDS: List[str] = [
 ]
 
 
+DEFAULT_KEYWORD_CATEGORIES: Dict[str, List[str]] = {
+    "engineering": DEFAULT_ENGINEERING_KEYWORDS,
+    "medical": [
+        "medical",
+        "healthcare",
+        "clinical",
+        "patient care",
+        "nursing",
+        "nurse",
+        "registered nurse",
+        "medical assistant",
+        "lab technician",
+        "pharmacy",
+        "radiology",
+    ],
+    "business": [
+        "business",
+        "business analyst",
+        "finance",
+        "accounting",
+        "sales",
+        "marketing",
+        "operations",
+        "project manager",
+        "supply chain",
+        "human resources",
+    ],
+    "chemical_engineer": [
+        "chemical engineer",
+        "chemical engineering",
+        "process engineer",
+        "process engineering",
+        "chemist",
+        "chemistry",
+        "chemical manufacturing",
+    ],
+    "manufacturing_engineer": [
+        "manufacturing engineer",
+        "manufacturing engineering",
+        "production engineer",
+        "process engineer",
+        "industrial engineer",
+        "lean manufacturing",
+        "quality engineer",
+    ],
+    "rn": [
+        "rn",
+        "registered nurse",
+        "staff nurse",
+        "nurse residency",
+        "clinical nurse",
+    ],
+    "construction_laborer": [
+        "construction laborer",
+        "construction worker",
+        "general laborer",
+        "site laborer",
+        "field laborer",
+        "crew member",
+    ],
+}
+
+
+ACTIVE_KEYWORD_CATEGORIES: List[str] = ["engineering"]
+CUSTOM_KEYWORDS: List[str] = []
+
+
 PRIORITY_THRESHOLD = 60
 PREFERRED_COMPANIES: List[str] = []
 PREFERRED_LOCATIONS: List[str] = []
@@ -31,7 +98,8 @@ INTERNSHIP_WEIGHT = 10
 FULLTIME_WEIGHT = 8
 DEADLINE_WEIGHT = 30
 RECENCY_WEIGHT = 20
-ENGINEERING_MATCH_WEIGHT = 25
+KEYWORD_MATCH_WEIGHT = 25
+ENGINEERING_MATCH_WEIGHT = KEYWORD_MATCH_WEIGHT
 COMPANY_PREFERENCE_WEIGHT = 10
 LOCATION_PREFERENCE_WEIGHT = 10
 
@@ -65,6 +133,11 @@ class AppConfig:
     browser_timeout_ms: int = 15000
     max_companies: Optional[int] = None
     engineering_keywords: List[str] = field(default_factory=lambda: DEFAULT_ENGINEERING_KEYWORDS.copy())
+    keyword_categories: Dict[str, List[str]] = field(
+        default_factory=lambda: {name: keywords.copy() for name, keywords in DEFAULT_KEYWORD_CATEGORIES.items()}
+    )
+    active_keyword_categories: List[str] = field(default_factory=lambda: ACTIVE_KEYWORD_CATEGORIES.copy())
+    custom_keywords: List[str] = field(default_factory=lambda: CUSTOM_KEYWORDS.copy())
     priority_threshold: int = PRIORITY_THRESHOLD
     preferred_companies: List[str] = field(default_factory=lambda: PREFERRED_COMPANIES.copy())
     preferred_locations: List[str] = field(default_factory=lambda: PREFERRED_LOCATIONS.copy())
@@ -72,6 +145,7 @@ class AppConfig:
     fulltime_weight: int = FULLTIME_WEIGHT
     deadline_weight: int = DEADLINE_WEIGHT
     recency_weight: int = RECENCY_WEIGHT
+    keyword_match_weight: int = KEYWORD_MATCH_WEIGHT
     engineering_match_weight: int = ENGINEERING_MATCH_WEIGHT
     company_preference_weight: int = COMPANY_PREFERENCE_WEIGHT
     location_preference_weight: int = LOCATION_PREFERENCE_WEIGHT
@@ -93,6 +167,8 @@ def build_config(
     workbook_mapping: Optional[WorkbookMapping] = None,
     discovery: Optional[DiscoveryConfig] = None,
     max_companies: Optional[int] = None,
+    active_keyword_categories: Optional[List[str]] = None,
+    custom_keywords: Optional[List[str]] = None,
     use_playwright_fallback: Optional[bool] = None,
     headless_browser: Optional[bool] = None,
 ) -> AppConfig:
@@ -109,6 +185,10 @@ def build_config(
         cfg.discovery = discovery
     if max_companies is not None:
         cfg.max_companies = max_companies
+    if active_keyword_categories is not None:
+        cfg.active_keyword_categories = active_keyword_categories
+    if custom_keywords is not None:
+        cfg.custom_keywords = custom_keywords
     if use_playwright_fallback is not None:
         cfg.use_playwright_fallback = use_playwright_fallback
     if headless_browser is not None:

@@ -7,7 +7,7 @@ from src.core import database as db
 from src.core.dashboard import write_dashboard
 from src.core.discovery import resolve_careers_url
 from src.core.extractor import extract_company_targets
-from src.core.filtering import is_engineering_job
+from src.core.filtering import build_search_keywords, matches_job_keywords
 from src.core.http_client import build_http_client
 from src.core.logging_utils import setup_logging
 from src.core.models import JobPosting, RunStats
@@ -40,6 +40,12 @@ def run_update(cfg: AppConfig) -> RunStats:
     )
 
     all_jobs: list[JobPosting] = []
+    search_keywords = build_search_keywords(
+        cfg.active_keyword_categories,
+        cfg.keyword_categories,
+        cfg.custom_keywords,
+        fallback_keywords=cfg.engineering_keywords,
+    )
     conn = db.connect_db(cfg.database_path)
     db.init_db(conn)
 
@@ -64,7 +70,7 @@ def run_update(cfg: AppConfig) -> RunStats:
                     title = normalize_text(s.title)
                     if not title:
                         continue
-                    if not is_engineering_job(title=title, keywords=cfg.engineering_keywords, description=s.description):
+                    if not matches_job_keywords(title=title, keywords=search_keywords, description=s.description):
                         continue
 
                     url = normalize_text(s.url)
@@ -88,7 +94,7 @@ def run_update(cfg: AppConfig) -> RunStats:
                         application_deadline=deadline,
                         days_remaining=days_remaining,
                     )
-                    job.priority_score = score_job(job, s.description, cfg.engineering_keywords, cfg, now=scan_start)
+                    job.priority_score = score_job(job, s.description, search_keywords, cfg, now=scan_start)
                     all_jobs.append(job)
             except Exception as exc:
                 stats.errors_encountered += 1
