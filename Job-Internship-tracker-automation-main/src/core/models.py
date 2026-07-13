@@ -24,6 +24,9 @@ class JobPosting:
     first_seen: datetime
     last_seen: datetime
     active: bool = True
+    application_deadline: str = ""
+    days_remaining: int | None = None
+    priority_score: int = 0
 
 
 @dataclass(slots=True)

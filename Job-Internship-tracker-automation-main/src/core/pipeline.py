@@ -11,6 +11,7 @@ from src.core.filtering import is_engineering_job
 from src.core.http_client import build_http_client
 from src.core.logging_utils import setup_logging
 from src.core.models import JobPosting, RunStats
+from src.core.priority import parse_deadline, score_job
 from src.core.utils import build_job_id, normalize_text
 from src.scrapers.registry import fetch_jobs_for_company
 
@@ -72,19 +73,23 @@ def run_update(cfg: AppConfig) -> RunStats:
                     location = normalize_text(s.location)
                     employment = normalize_text(s.employment_type)
                     job_id = build_job_id(target.company, title, location, url)
-                    all_jobs.append(
-                        JobPosting(
-                            job_id=job_id,
-                            company=target.company,
-                            title=title,
-                            location=location,
-                            employment_type=employment,
-                            url=url,
-                            first_seen=scan_start,
-                            last_seen=scan_start,
-                            active=True,
-                        )
+                    first_seen = db.get_job_first_seen(conn, job_id) or scan_start
+                    deadline, days_remaining = parse_deadline(s.application_deadline, today=scan_start.date())
+                    job = JobPosting(
+                        job_id=job_id,
+                        company=target.company,
+                        title=title,
+                        location=location,
+                        employment_type=employment,
+                        url=url,
+                        first_seen=first_seen,
+                        last_seen=scan_start,
+                        active=True,
+                        application_deadline=deadline,
+                        days_remaining=days_remaining,
                     )
+                    job.priority_score = score_job(job, s.description, cfg.engineering_keywords, cfg, now=scan_start)
+                    all_jobs.append(job)
             except Exception as exc:
                 stats.errors_encountered += 1
                 logger.exception(
@@ -105,7 +110,7 @@ def run_update(cfg: AppConfig) -> RunStats:
         stats.total_active_jobs = db.get_total_active_jobs(conn)
         stats.last_scan_date = scan_start.isoformat(timespec="seconds")
 
-        write_dashboard(conn, cfg.output_workbook, stats)
+        write_dashboard(conn, cfg.output_workbook, stats, cfg.priority_threshold)
     finally:
         conn.close()
 

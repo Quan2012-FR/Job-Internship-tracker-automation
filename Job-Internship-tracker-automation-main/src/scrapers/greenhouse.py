@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from src.scrapers.base import ScrapedJob
+from src.scrapers.base import ScrapedJob, extract_deadline_value
 
 
 def _extract_board_token(careers_url: str) -> str:
@@ -41,7 +41,16 @@ def fetch_jobs(company: str, careers_url: str, http_client, logger) -> list[Scra
         title = str(item.get("title") or "").strip()
         absolute_url = str(item.get("absolute_url") or "").strip()
         location = str((item.get("location") or {}).get("name") or "").strip()
+        deadline = extract_deadline_value(item)
         if not title or not absolute_url:
             continue
-        jobs.append(ScrapedJob(title=title, location=location, employment_type="", url=absolute_url))
+        jobs.append(
+            ScrapedJob(
+                title=title,
+                location=location,
+                employment_type="",
+                url=absolute_url,
+                application_deadline=deadline,
+            )
+        )
     return jobs

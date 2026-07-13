@@ -25,12 +25,19 @@ def init_db(conn: sqlite3.Connection) -> None:
             url TEXT NOT NULL,
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
+            active INTEGER NOT NULL DEFAULT 1,
+            application_deadline TEXT,
+            days_remaining INTEGER,
+            priority_score INTEGER NOT NULL DEFAULT 0,
+            application_status TEXT NOT NULL DEFAULT 'Not Started',
+            notes TEXT NOT NULL DEFAULT ''
         )
         """
     )
+    _migrate_jobs_table(conn)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(active)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_last_seen ON jobs(last_seen)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(active, priority_score)")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS career_url_cache (
@@ -45,6 +52,20 @@ def init_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_career_url_cache_success ON career_url_cache(last_success)")
     conn.commit()
+
+
+def _migrate_jobs_table(conn: sqlite3.Connection) -> None:
+    existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+    migrations = {
+        "application_deadline": "ALTER TABLE jobs ADD COLUMN application_deadline TEXT",
+        "days_remaining": "ALTER TABLE jobs ADD COLUMN days_remaining INTEGER",
+        "priority_score": "ALTER TABLE jobs ADD COLUMN priority_score INTEGER NOT NULL DEFAULT 0",
+        "application_status": "ALTER TABLE jobs ADD COLUMN application_status TEXT NOT NULL DEFAULT 'Not Started'",
+        "notes": "ALTER TABLE jobs ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+    }
+    for column, statement in migrations.items():
+        if column not in existing_columns:
+            conn.execute(statement)
 
 
 def get_cached_career_url(conn: sqlite3.Connection, company: str) -> sqlite3.Row | None:
@@ -104,7 +125,10 @@ def upsert_jobs(
                     employment_type = ?,
                     url = ?,
                     last_seen = ?,
-                    active = 1
+                    active = 1,
+                    application_deadline = ?,
+                    days_remaining = ?,
+                    priority_score = ?
                 WHERE job_id = ?
                 """,
                 (
@@ -114,6 +138,9 @@ def upsert_jobs(
                     job.employment_type,
                     job.url,
                     scan_time.isoformat(),
+                    job.application_deadline or None,
+                    job.days_remaining,
+                    job.priority_score,
                     job.job_id,
                 ),
             )
@@ -121,8 +148,11 @@ def upsert_jobs(
             new_count += 1
             conn.execute(
                 """
-                INSERT INTO jobs (job_id, company, title, location, employment_type, url, first_seen, last_seen, active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO jobs (
+                    job_id, company, title, location, employment_type, url, first_seen, last_seen, active,
+                    application_deadline, days_remaining, priority_score, application_status, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'Not Started', '')
                 """,
                 (
                     job.job_id,
@@ -133,11 +163,24 @@ def upsert_jobs(
                     job.url,
                     scan_time.isoformat(),
                     scan_time.isoformat(),
+                    job.application_deadline or None,
+                    job.days_remaining,
+                    job.priority_score,
                 ),
             )
 
     conn.commit()
     return new_count, seen_ids
+
+
+def get_job_first_seen(conn: sqlite3.Connection, job_id: str) -> datetime | None:
+    row = conn.execute("SELECT first_seen FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    if not row:
+        return None
+    try:
+        return datetime.fromisoformat(row["first_seen"])
+    except ValueError:
+        return None
 
 
 def mark_inactive_missing(conn: sqlite3.Connection, seen_ids: set[str]) -> int:
@@ -160,7 +203,8 @@ def get_total_active_jobs(conn: sqlite3.Connection) -> int:
 def get_active_jobs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
         """
-        SELECT company, title, location, employment_type, first_seen, last_seen, url
+        SELECT company, title, location, employment_type, first_seen, last_seen, url,
+               application_deadline, days_remaining, priority_score, application_status, notes
         FROM jobs
         WHERE active = 1
         ORDER BY company, title
@@ -171,7 +215,8 @@ def get_active_jobs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def get_new_jobs_all_time(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
         """
-        SELECT first_seen AS date_found, company, title, location, employment_type, url
+        SELECT first_seen AS date_found, company, title, location, employment_type, url,
+               application_deadline, days_remaining, priority_score, application_status, notes
         FROM jobs
         ORDER BY first_seen DESC, company
         """
@@ -181,10 +226,52 @@ def get_new_jobs_all_time(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def get_jobs_found_since(conn: sqlite3.Connection, since_dt: datetime) -> list[sqlite3.Row]:
     return conn.execute(
         """
-        SELECT first_seen AS date_found, company, title, location, employment_type, url
+        SELECT first_seen AS date_found, company, title, location, employment_type, url,
+               application_deadline, days_remaining, priority_score, application_status, notes
         FROM jobs
         WHERE first_seen >= ?
         ORDER BY first_seen DESC, company
+        """,
+        (since_dt.isoformat(),),
+    ).fetchall()
+
+
+def update_application_tracking(conn: sqlite3.Connection, url: str, application_status: str, notes: str) -> None:
+    conn.execute(
+        """
+        UPDATE jobs
+        SET application_status = ?,
+            notes = ?
+        WHERE url = ?
+        """,
+        (application_status, notes, url),
+    )
+
+
+def get_ready_to_apply_jobs(conn: sqlite3.Connection, priority_threshold: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT company, title, location, employment_type, first_seen AS date_found,
+               application_deadline, days_remaining, priority_score, url, application_status, notes
+        FROM jobs
+        WHERE active = 1
+          AND application_status != 'Applied'
+          AND priority_score >= ?
+        ORDER BY days_remaining IS NULL, days_remaining ASC, priority_score DESC, first_seen DESC
+        """,
+        (priority_threshold,),
+    ).fetchall()
+
+
+def get_this_week_jobs(conn: sqlite3.Connection, since_dt: datetime) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT company, title, location, days_remaining, priority_score, url, application_status
+        FROM jobs
+        WHERE active = 1
+          AND application_status != 'Applied'
+          AND first_seen >= ?
+        ORDER BY priority_score DESC, days_remaining IS NULL, days_remaining ASC
         """,
         (since_dt.isoformat(),),
     ).fetchall()

@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from src.scrapers.base import ScrapedJob
+from src.scrapers.base import ScrapedJob, extract_deadline_value
 
 
 def can_handle(url: str) -> bool:
@@ -44,6 +44,7 @@ def fetch_jobs(company: str, careers_url: str, http_client, logger) -> list[Scra
                 emp_type = str(item.get("employmentType") or "").strip()
                 url = str(item.get("url") or careers_url).strip()
                 desc = str(item.get("description") or "").strip()
+                deadline = extract_deadline_value(item)
                 if title and url:
                     jobs.append(
                         ScrapedJob(
@@ -52,6 +53,7 @@ def fetch_jobs(company: str, careers_url: str, http_client, logger) -> list[Scra
                             employment_type=emp_type,
                             url=urljoin(careers_url, url),
                             description=desc,
+                            application_deadline=deadline,
                         )
                     )
     except Exception as exc:

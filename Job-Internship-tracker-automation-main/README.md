@@ -1,23 +1,657 @@
-# Engineering Job Tracker
+# Engineering Job and Internship Tracker
 
-Local, reusable Python automation for tracking engineering internships and jobs from company career pages.
+A local Python tool that finds engineering internships and full-time jobs from company career pages, stores them in a database, and creates an organized Excel dashboard.
 
-This project treats your source workbook as read-only input and generates a separate dashboard workbook plus a SQLite history database.
+Everything runs on your computer. No paid APIs or cloud services are required.
 
-## Features
+## What This Project Does
 
-- Reads company and careers URLs from an Excel workbook in read-only mode.
-- Supports company-name-only rows with best-effort careers URL discovery and SQLite caching.
-- Supports platform scrapers for Workday, Greenhouse, Lever, iCIMS, and Taleo.
-- Uses structured endpoints when available, with fallback JSON-LD extraction.
-- Optional Playwright fallback can render JavaScript-heavy career pages when static scraping finds no jobs.
-- Filters only engineering-related positions with centralized keyword rules.
-- Stores job history in SQLite to avoid duplicates and track active/inactive state.
-- Generates a separate dashboard workbook with weekly review and summary sheets.
-- CLI supports custom input/output/database paths.
-- No paid APIs. No cloud required. Runs locally.
+The tracker:
 
-## Project Structure
+1. Reads a list of companies from an Excel workbook.
+2. Visits each company’s career page.
+3. Searches for engineering-related jobs and internships.
+4. Saves the results in a SQLite database.
+5. Creates a separate Excel dashboard for reviewing and tracking applications.
+
+Your original company workbook is treated as **read-only input** and is never changed.
+
+The tracker does not automatically apply for jobs or submit forms.
+
+---
+
+# Quick Start
+
+## 1. Install Python
+
+Install Python 3.10 or newer.
+
+During installation on Windows, make sure **Add Python to PATH** is selected.
+
+You can check your Python version by running:
+
+```powershell
+python --version
+```
+
+On macOS or Linux, you may need to use:
+
+```bash
+python3 --version
+```
+
+## 2. Open the Project Folder
+
+Open PowerShell, Command Prompt, Terminal, or the VS Code terminal inside the project folder.
+
+For example, the folder should contain:
+
+```text
+update_jobs.py
+config.py
+requirements.txt
+src
+```
+
+## 3. Create a Virtual Environment
+
+A virtual environment keeps this project’s Python packages separate from your other projects.
+
+### Windows PowerShell
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+After activation, your terminal should show something similar to:
+
+```text
+(.venv) PS C:\Your\Project\Folder>
+```
+
+### macOS or Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+## 4. Install the Required Packages
+
+Run:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then install the Chromium browser used by the optional Playwright fallback:
+
+```bash
+python -m playwright install chromium
+```
+
+## 5. Prepare Your Company Workbook
+
+Create an Excel workbook containing at least a company-name column.
+
+A basic workbook might look like this:
+
+| Company     | Careers URL                                 |
+| ----------- | ------------------------------------------- |
+| Caterpillar | https://www.caterpillar.com/en/careers.html |
+| Rolls-Royce | https://careers.rolls-royce.com             |
+| Eaton       |                                             |
+| Cummins     |                                             |
+
+The careers URL is optional. When it is missing, the tracker can attempt to find the company’s career page.
+
+Common supported column names include:
+
+* `Company`
+* `Employer`
+* `Careers URL`
+* `Apply where`
+* `Job URL`
+
+A sample workbook is included at:
+
+```text
+sample_data/example_company_list.xlsx
+```
+
+## 6. Run the Tracker
+
+Use the `--input` option followed by the path to your company workbook.
+
+Example:
+
+```bash
+python update_jobs.py --input companies.xlsx
+```
+
+Using the included sample workbook:
+
+```bash
+python update_jobs.py --input sample_data/example_company_list.xlsx
+```
+
+If the path contains spaces, place quotation marks around the entire path:
+
+```powershell
+python update_jobs.py --input "C:\Projects\Job Tracker\companies.xlsx"
+```
+
+Do not add the workbook path directly inside `update_jobs.py`. Pass it through the terminal using `--input`.
+
+## 7. Open the Dashboard
+
+After the program finishes, open:
+
+```text
+engineering_job_dashboard.xlsx
+```
+
+The dashboard contains the jobs found during the scan and allows you to track application statuses and notes.
+
+---
+
+# Features
+
+* Reads company names and career-page URLs from an Excel workbook.
+* Never modifies the original input workbook.
+* Supports rows containing only a company name.
+* Attempts to discover missing career-page URLs.
+* Caches discovered URLs in SQLite for future runs.
+* Supports Workday, Greenhouse, Lever, iCIMS, and Taleo.
+* Uses structured job endpoints when available.
+* Falls back to JSON-LD extraction for other career pages.
+* Can optionally use Playwright for JavaScript-heavy websites.
+* Filters results to engineering-related positions.
+* Stores job history and prevents duplicate entries.
+* Tracks whether jobs are active or inactive.
+* Scores jobs based on urgency, recency, engineering relevance, employment type, company preference, and location preference.
+* Creates an organized Excel dashboard.
+* Preserves application statuses and notes between dashboard refreshes.
+* Supports custom input, output, and database locations.
+* Runs locally without paid APIs.
+* Does not submit applications or interact with Simplify accounts.
+
+---
+
+# Basic Commands
+
+## Use the Default Output Files
+
+```bash
+python update_jobs.py --input companies.xlsx
+```
+
+This normally creates:
+
+```text
+engineering_job_dashboard.xlsx
+jobs.db
+```
+
+## Choose Your Own Output and Database Names
+
+```bash
+python update_jobs.py --input companies.xlsx --output my_dashboard.xlsx --database my_jobs.db
+```
+
+## Process Only a Limited Number of Companies
+
+This is useful when testing the program:
+
+```bash
+python update_jobs.py --input companies.xlsx --max-companies 10
+```
+
+## Enable the Browser Fallback
+
+Some company websites load jobs using JavaScript. Playwright can open these pages in a browser when normal scraping finds no jobs.
+
+```bash
+python update_jobs.py --input companies.xlsx --playwright-fallback
+```
+
+To see the browser while it runs:
+
+```bash
+python update_jobs.py --input companies.xlsx --playwright-fallback --show-browser
+```
+
+## Use Custom Workbook Headers
+
+Suppose your workbook uses:
+
+* Worksheet: `Tabelle1`
+* Company column: `Company`
+* URL column: `Apply where`
+
+Run:
+
+```bash
+python update_jobs.py --input companies.xlsx --sheet Tabelle1 --company-column Company --url-column "Apply where"
+```
+
+---
+
+# Command-Line Options
+
+| Option                       | Purpose                                                         |
+| ---------------------------- | --------------------------------------------------------------- |
+| `--input`                    | Path to the source Excel workbook. This option is required.     |
+| `--output`                   | Path for the generated dashboard workbook.                      |
+| `--database`                 | Path for the SQLite database.                                   |
+| `--sheet`                    | Name of the worksheet to read.                                  |
+| `--company-column`           | Exact header used for company names.                            |
+| `--url-column`               | Exact header used for career-page URLs.                         |
+| `--max-companies`            | Limits how many companies are processed.                        |
+| `--no-discovery`             | Requires workbook URLs and disables career-page discovery.      |
+| `--no-search-fallback`       | Disables the search-engine discovery fallback.                  |
+| `--cache-ttl-days`           | Number of days a successful cached career URL remains trusted.  |
+| `--revalidate-after-days`    | Number of days before a cached URL is checked again.            |
+| `--max-discovery-candidates` | Maximum number of possible career URLs tested for each company. |
+| `--playwright-fallback`      | Uses a browser when normal scraping finds no jobs.              |
+| `--show-browser`             | Displays the browser window during Playwright processing.       |
+
+To see the command-line help screen, run:
+
+```bash
+python update_jobs.py --help
+```
+
+---
+
+# Source Workbook Requirements
+
+The source workbook is used only as input and is never modified.
+
+## Required Information
+
+The workbook must contain:
+
+* A company-name column
+
+## Optional Information
+
+The workbook may also contain:
+
+* A career-page URL column
+
+If the URL is missing, the tracker can attempt to discover the company’s career page.
+
+## Example Workbook
+
+| Company      | Apply where                     |
+| ------------ | ------------------------------- |
+| Boeing       | https://jobs.boeing.com         |
+| GE Aerospace | https://careers.geaerospace.com |
+| RTX          |                                 |
+| John Deere   |                                 |
+
+The program can automatically recognize several common header names. You can also specify the exact headers using `--company-column` and `--url-column`.
+
+Workbook mappings can also be configured in `config.py` using `WorkbookMapping`.
+
+---
+
+# Career-Page Discovery
+
+When a company does not have a career-page URL in the workbook, the tracker can attempt to find one.
+
+The discovery process may:
+
+1. Generate likely career-page URLs.
+2. Test those URLs.
+3. Use a search fallback when necessary.
+4. Save successful results in SQLite.
+
+Discovery can be disabled with:
+
+```bash
+python update_jobs.py --input companies.xlsx --no-discovery
+```
+
+The search fallback can be disabled separately with:
+
+```bash
+python update_jobs.py --input companies.xlsx --no-search-fallback
+```
+
+Career-page discovery is best effort. Some companies may still require a correct URL to be entered manually.
+
+---
+
+# Career URL Cache
+
+The SQLite database contains a `career_url_cache` table.
+
+It stores:
+
+* Company name
+* Career-page URL
+* Detected platform
+* Date last validated
+* Date last successful
+* URL source
+
+Successful URLs are reused during future scans until the configured cache period expires.
+
+Older cached URLs are checked again before the program attempts a new discovery.
+
+---
+
+# Dashboard Sheets
+
+The generated Excel dashboard contains the following worksheets.
+
+## 1. THIS WEEK
+
+Shows active jobs that:
+
+* Were first discovered within the last seven days
+* Have not been marked `Applied`
+
+Columns:
+
+* Company
+* Position Title
+* Location
+* Days Remaining
+* Priority Score
+* Job URL
+* Application Status
+
+Jobs are sorted by highest Priority Score first.
+
+## 2. READY TO APPLY
+
+Shows active jobs that:
+
+* Meet the configured Priority Score threshold
+* Have not been marked `Applied`
+
+Columns:
+
+* Company
+* Position Title
+* Location
+* Employment Type
+* Date Found
+* Application Deadline
+* Days Remaining
+* Priority Score
+* Job URL
+* Application Status
+* Notes
+
+Jobs are sorted by the nearest deadline and then by Priority Score.
+
+## 3. NEEDS REVIEW
+
+Shows jobs first discovered within the last seven days.
+
+Columns:
+
+* Date Found
+* Company
+* Position Title
+* Location
+* Employment Type
+* Job URL
+* Application Status
+* Notes
+
+New jobs begin with the status:
+
+```text
+Not Started
+```
+
+## 4. NEW JOBS
+
+Shows jobs when they enter the database for the first time.
+
+It includes the same tracking columns as the `NEEDS REVIEW` sheet.
+
+## 5. ALL ACTIVE JOBS
+
+Shows every job currently considered active.
+
+Columns:
+
+* Company
+* Position Title
+* Location
+* Employment Type
+* Date First Seen
+* Last Seen
+* Application Deadline
+* Days Remaining
+* Priority Score
+* Job URL
+* Application Status
+
+## 6. STATISTICS
+
+Displays a summary of the most recent scan.
+
+Example:
+
+| Metric              | Value               |
+| ------------------- | ------------------- |
+| Companies Checked   | 42                  |
+| Jobs Found This Run | 126                 |
+| New Jobs This Run   | 18                  |
+| Total Active Jobs   | 201                 |
+| Last Scan Date      | 2026-07-09T18:20:00 |
+| Priority Threshold  | Configured value    |
+
+---
+
+# Application Tracking
+
+Job URLs are clickable inside Excel.
+
+The following application statuses are supported:
+
+* Not Started
+* Application Opened
+* Applied
+* Interviewing
+* Rejected
+* Offer
+* Withdrawn
+
+You can also enter notes in the dashboard.
+
+Before creating a refreshed dashboard, the tracker reads your existing statuses and notes and saves them to the database. This prevents your updates from being erased during the next scan.
+
+Do not delete or rename important tracking columns unless you also update the program.
+
+---
+
+# Deadline Colors
+
+When an application deadline is available, the dashboard color-codes the `Days Remaining` value:
+
+* Red: 0–7 days remaining
+* Yellow: 8–14 days remaining
+* Green: 15 or more days remaining
+
+When no deadline is available, the dashboard displays:
+
+```text
+Unknown
+```
+
+---
+
+# Simplify Workflow
+
+This tracker can be used beside the Simplify browser extension, but it does not control Simplify.
+
+A typical workflow is:
+
+1. Run the tracker.
+
+```bash
+python update_jobs.py --input companies.xlsx
+```
+
+2. Open `engineering_job_dashboard.xlsx`.
+3. Review the `THIS WEEK` sheet.
+4. Review the `READY TO APPLY` sheet.
+5. Click a job URL.
+6. Complete the application manually in your browser.
+7. Return to the dashboard.
+8. Update the job’s Application Status.
+9. Add notes when needed.
+10. Run the tracker again later to refresh the job listings.
+
+The tracker handles discovery, prioritization, history, and organization. It never submits an application.
+
+---
+
+# Priority Scoring
+
+Job scoring can be adjusted in `config.py`.
+
+Available settings include:
+
+* `PRIORITY_THRESHOLD`
+* `PREFERRED_COMPANIES`
+* `PREFERRED_LOCATIONS`
+* `INTERNSHIP_WEIGHT`
+* `FULLTIME_WEIGHT`
+* `DEADLINE_WEIGHT`
+* `RECENCY_WEIGHT`
+* `ENGINEERING_MATCH_WEIGHT`
+* `COMPANY_PREFERENCE_WEIGHT`
+* `LOCATION_PREFERENCE_WEIGHT`
+
+Higher weights give that category more influence over the final Priority Score.
+
+For example, increasing `LOCATION_PREFERENCE_WEIGHT` makes jobs in preferred locations receive a larger score increase.
+
+Beginners can leave the default values unchanged.
+
+---
+
+# Engineering Job Filtering
+
+The tracker uses centralized keyword rules to decide whether a position is engineering-related.
+
+These rules can include terms connected to areas such as:
+
+* Mechanical engineering
+* Manufacturing
+* Design
+* Controls
+* Mechatronics
+* Aerospace
+* Automotive
+* Robotics
+* Quality engineering
+* Test engineering
+* Process engineering
+
+Review the keyword settings if relevant jobs are being excluded or unrelated jobs are being included.
+
+---
+
+# Supported Career Platforms
+
+The project includes platform-specific support for:
+
+* Workday
+* Greenhouse
+* Lever
+* iCIMS
+* Taleo
+
+It also supports:
+
+* Generic JSON-LD job extraction
+* Rendered-page fallback using Playwright
+
+Not every career website behaves the same way. Some companies may block automated requests, require authentication, or use unsupported website structures.
+
+---
+
+# Database
+
+The project uses SQLite, which stores information in a local `.db` file.
+
+The default database is:
+
+```text
+jobs.db
+```
+
+You do not need to install a separate database program.
+
+## Stored Job Information
+
+The database stores:
+
+* `job_id`
+* `company`
+* `title`
+* `location`
+* `employment_type`
+* `url`
+* `first_seen`
+* `last_seen`
+* `active`
+* `application_deadline`
+* `days_remaining`
+* `priority_score`
+* `application_status`
+* `notes`
+
+## Database Behavior
+
+* New jobs are inserted.
+* Existing jobs have their latest information updated.
+* Application statuses and notes are preserved.
+* Jobs not found during the current scan may be marked inactive.
+* Inactive jobs remain in the database as historical records.
+* Existing databases are migrated using additive columns when the schema changes.
+
+The database should normally be kept between runs. Deleting it removes the tracker’s stored job history.
+
+---
+
+# Logging
+
+Each run creates or updates a daily log file inside the `logs` folder.
+
+Example:
+
+```text
+logs/run_20260709.log
+```
+
+The log can include:
+
+* Start time
+* End time
+* Companies checked
+* Jobs found
+* New jobs
+* Jobs marked inactive
+* Errors
+* Failed URLs
+
+Check the log file when a company fails or returns no jobs.
+
+---
+
+# Project Structure
 
 ```text
 engineering-job-tracker/
@@ -52,214 +686,275 @@ engineering-job-tracker/
 └── README.md
 ```
 
-## Installation
+## Important Files
 
-### Windows
+### `update_jobs.py`
 
-1. Install Python 3.10+.
-2. Open PowerShell in the project folder.
-3. Create and activate a virtual environment:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-4. Install dependencies:
-
-```powershell
-pip install -r requirements.txt
-python -m playwright install chromium
-```
-
-### macOS / Linux
-
-1. Install Python 3.10+.
-2. Open Terminal in the project folder.
-3. Create and activate a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-4. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-python -m playwright install chromium
-```
-
-## Usage
-
-Run with required input workbook:
+The main file used to run the tracker.
 
 ```bash
 python update_jobs.py --input companies.xlsx
 ```
 
-Optional output and database paths:
+### `config.py`
 
-```bash
-python update_jobs.py --input companies.xlsx --output engineering_job_dashboard.xlsx --database jobs.db
+Contains settings for job filtering, workbook mapping, and Priority Score weights.
+
+### `requirements.txt`
+
+Lists the Python packages required by the project.
+
+### `jobs.db`
+
+Stores job history, application statuses, notes, and cached career-page URLs.
+
+### `engineering_job_dashboard.xlsx`
+
+The generated Excel dashboard.
+
+---
+
+# Adding Another Scraper
+
+This section is intended for developers who want to support an additional career platform.
+
+## 1. Create the Scraper File
+
+Add a new file inside:
+
+```text
+src/scrapers
 ```
 
-Custom workbook mapping:
+Example:
 
-```bash
-python update_jobs.py --input companies.xlsx --sheet Tabelle1 --company-column Company --url-column "Apply where"
+```text
+src/scrapers/myplatform.py
 ```
 
-Company-name-only discovery and JavaScript fallback controls:
+## 2. Implement the Required Methods
 
-```bash
-python update_jobs.py --input companies.xlsx --playwright-fallback --max-companies 25
+The scraper should implement:
+
+```python
+can_handle(url: str) -> bool
 ```
 
-Useful flags:
+and:
 
-- `--sheet`: worksheet name to read.
-- `--company-column`: exact header for the company name column.
-- `--url-column`: exact header for the optional careers URL column.
-- `--max-companies`: limit the number of companies processed in a run.
-- `--no-discovery`: require workbook URLs and skip careers URL discovery.
-- `--no-search-fallback`: skip search-engine based discovery fallback.
-- `--cache-ttl-days`: days to trust a successful cached careers URL.
-- `--revalidate-after-days`: days before revalidating a cached URL when used.
-- `--max-discovery-candidates`: maximum generated candidate URLs to probe per company.
-- `--playwright-fallback`: render pages with Playwright if static scraping finds no jobs.
-- `--show-browser`: show the browser window when Playwright fallback is enabled.
+```python
+fetch_jobs(
+    company,
+    careers_url,
+    http_client,
+    logger
+) -> list[ScrapedJob]
+```
 
-## Source Workbook Expectations
+## 3. Register the Scraper
 
-The source workbook is read-only input and is never modified.
+Add the scraper to:
 
-Expected fields:
+```text
+src/scrapers/registry.py
+```
 
-- Company name column (for example: Company, Employer)
-- Optional careers URL column (for example: Apply where, Careers URL, Job URL)
+---
 
-The extractor auto-detects common header names and can be customized with CLI flags or in config.py using WorkbookMapping. If a careers URL is blank or the URL column is missing, the tool can attempt local best-effort discovery from generated candidate URLs and a search fallback.
+# Troubleshooting
 
-## Careers URL Cache
+## Error: Required Argument `--input` Is Missing
 
-SQLite stores discovered and workbook-provided careers URLs in `career_url_cache`:
+Example error:
 
-- company
-- careers_url
-- platform
-- last_validated
-- last_success
-- source
+```text
+update_jobs.py: error: the following arguments are required: --input
+```
 
-Successful cached URLs are reused across runs until the configured TTL expires. Stale cached URLs are revalidated before fresh discovery is attempted.
+Run the program with the workbook path:
 
-## Dashboard Output
+```bash
+python update_jobs.py --input companies.xlsx
+```
 
-The generated dashboard workbook contains:
+## Error: Unrecognized Arguments
 
-1. NEEDS REVIEW
-- Jobs first discovered within the last 7 days
-- Columns: Date Found, Company, Position Title, Location, Employment Type, Job URL, Status, Notes
-- Default Status: Not Reviewed
+This commonly happens when a Windows path contains spaces and is not surrounded by quotation marks.
 
-2. NEW JOBS
-- All jobs that entered the database for the first time
-- Same columns and default status
+Incorrect:
 
-3. ALL ACTIVE JOBS
-- Currently active jobs
-- Columns: Company, Position Title, Location, Employment Type, Date First Seen, Last Seen, Job URL
+```powershell
+python update_jobs.py --input C:\Projects\Job Tracker\companies.xlsx
+```
 
-4. STATISTICS
-- Companies Checked
-- Jobs Found This Run
-- New Jobs This Run
-- Total Active Jobs
-- Last Scan Date
+Correct:
 
-## Database Schema
+```powershell
+python update_jobs.py --input "C:\Projects\Job Tracker\companies.xlsx"
+```
 
-SQLite file (jobs.db by default) stores:
+## The Workbook Cannot Be Found
 
-- job_id (primary key)
-- company
-- title
-- location
-- employment_type
-- url
-- first_seen
-- last_seen
-- active (1 or 0)
+Confirm that:
 
-Behavior:
+* The filename is correct.
+* The file extension is included.
+* The path is surrounded by quotation marks when it contains spaces.
+* The workbook is located at the path you entered.
 
-- New jobs are inserted.
-- Existing jobs update last_seen and stay active.
-- Previously known jobs not found in current run are marked inactive.
-- Historical data is preserved.
+You can also use the full path:
 
-## Supported Platforms
+```powershell
+python update_jobs.py --input "C:\Users\YourName\Documents\companies.xlsx"
+```
 
-- Workday
-- Greenhouse
-- Lever
-- iCIMS
-- Taleo
-- Generic JSON-LD and rendered-page fallback
+## No Jobs Were Found
 
-Design is modular for adding more platforms.
+Check the following:
 
-## Logging
+* Make sure the career-page URLs are valid.
+* Open the URLs manually in your browser.
+* Check your internet connection.
+* Review the engineering keyword list in `config.py`.
+* Enable Playwright fallback.
+* Review the daily log file.
+* Confirm the website does not require a login.
+* Confirm the website is not blocking automated requests.
 
-Each run creates a daily log file:
+Try:
 
-- logs/run_YYYYMMDD.log
+```bash
+python update_jobs.py --input companies.xlsx --playwright-fallback
+```
 
-Includes:
+## Some Companies Failed
 
-- Start and end time
-- Companies checked
-- Jobs found
-- New jobs
-- Jobs marked inactive
-- Errors
+It is normal for some career websites to fail because company pages use different systems and security settings.
 
-## Adding a New Scraper Module
+Review:
 
-1. Add file in src/scrapers, for example myplatform.py.
-2. Implement:
-- can_handle(url: str) -> bool
-- fetch_jobs(company, careers_url, http_client, logger) -> list[ScrapedJob]
-3. Register in src/scrapers/registry.py.
+```text
+logs/run_YYYYMMDD.log
+```
 
-## Output Example
+For failed companies, try:
 
-Statistics sheet sample:
+* Updating the career-page URL in the source workbook.
+* Using the company’s main job-search page instead of its general careers page.
+* Enabling Playwright fallback.
+* Running a smaller test with `--max-companies`.
 
-| Metric | Value |
-|---|---|
-| Companies Checked | 42 |
-| Jobs Found This Run | 126 |
-| New Jobs This Run | 18 |
-| Total Active Jobs | 201 |
-| Last Scan Date | 2026-07-09T18:20:00 |
+Example:
 
-## Troubleshooting
+```bash
+python update_jobs.py --input companies.xlsx --max-companies 5 --playwright-fallback
+```
 
-- No jobs found:
-  - Verify careers URLs are valid and public.
-  - Confirm network access is available.
-  - Check engineering keyword list in config.py.
-- Missing columns:
-  - Ensure your workbook has a company and URL column.
-  - Configure WorkbookMapping in config.py if headers are custom.
-- Import errors:
-  - Re-activate virtual environment and reinstall requirements.
+## Missing Workbook Columns
 
-## Notes
+Make sure the workbook contains a company-name column.
 
-- This tool does not send emails.
-- This tool does not apply for jobs.
-- This tool does not modify the source workbook.
-- All processing runs locally.
+When the headers are unusual, specify them manually:
+
+```bash
+python update_jobs.py --input companies.xlsx --company-column Employer --url-column "Job Link"
+```
+
+## Import Errors
+
+Reactivate the virtual environment.
+
+### Windows
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### macOS or Linux
+
+```bash
+source .venv/bin/activate
+```
+
+Then reinstall the packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+## PowerShell Blocks Virtual Environment Activation
+
+PowerShell may display an execution-policy error.
+
+You can allow locally created scripts for your user account by running:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Then activate the environment again:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Only change PowerShell execution policies when you understand and accept the security implications.
+
+## Playwright Browser Is Missing
+
+Run:
+
+```bash
+python -m playwright install chromium
+```
+
+## Dashboard Is Open During a Refresh
+
+Excel may prevent the program from replacing the dashboard while the workbook is open.
+
+Close the dashboard workbook and run the command again.
+
+---
+
+# Recommended First Test
+
+Before processing a large workbook, test the program using a small number of companies:
+
+```bash
+python update_jobs.py --input sample_data/example_company_list.xlsx --max-companies 5
+```
+
+After confirming that the dashboard is created correctly, run the complete workbook:
+
+```bash
+python update_jobs.py --input companies.xlsx
+```
+
+For JavaScript-heavy pages:
+
+```bash
+python update_jobs.py --input companies.xlsx --playwright-fallback
+```
+
+---
+
+# What This Project Does Not Do
+
+This project does not:
+
+* Submit job applications
+* Fill out application forms
+* Log in to company accounts
+* Control the Simplify browser extension
+* Send emails
+* Modify the source workbook
+* Require paid APIs
+* Require cloud hosting
+
+All processing runs locally on your computer.
+
+---
+
+# License
+
+See the `LICENSE` file for the project’s license terms.

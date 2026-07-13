@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from src.scrapers.base import ScrapedJob
+from src.scrapers.base import ScrapedJob, extract_deadline_value
 
 JOB_LINK_TERMS = (
     "job",
@@ -67,6 +67,7 @@ def _extract_json_ld_jobs(careers_url: str, html: str) -> list[ScrapedJob]:
             employment_type = str(item.get("employmentType") or "").strip()
             location = _json_ld_location(item)
             description = str(item.get("description") or "").strip()
+            deadline = extract_deadline_value(item)
             if title and url:
                 jobs.append(
                     ScrapedJob(
@@ -75,6 +76,7 @@ def _extract_json_ld_jobs(careers_url: str, html: str) -> list[ScrapedJob]:
                         employment_type=employment_type,
                         url=urljoin(careers_url, url),
                         description=description,
+                        application_deadline=deadline,
                     )
                 )
     return jobs

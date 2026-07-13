@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from src.scrapers.base import ScrapedJob
+from src.scrapers.base import ScrapedJob, extract_deadline_value
 
 
 def _workday_endpoint(careers_url: str) -> str:
@@ -49,8 +49,17 @@ def fetch_jobs(company: str, careers_url: str, http_client, logger) -> list[Scra
         title = str(item.get("title") or "").strip()
         ext_path = str(item.get("externalPath") or "").strip()
         location = str(item.get("locationsText") or "").strip()
+        deadline = extract_deadline_value(item)
         if not title or not ext_path:
             continue
         job_url = endpoint.replace("/jobs", ext_path)
-        jobs.append(ScrapedJob(title=title, location=location, employment_type="", url=job_url))
+        jobs.append(
+            ScrapedJob(
+                title=title,
+                location=location,
+                employment_type="",
+                url=job_url,
+                application_deadline=deadline,
+            )
+        )
     return jobs

@@ -24,6 +24,18 @@ DEFAULT_ENGINEERING_KEYWORDS: List[str] = [
 ]
 
 
+PRIORITY_THRESHOLD = 60
+PREFERRED_COMPANIES: List[str] = []
+PREFERRED_LOCATIONS: List[str] = []
+INTERNSHIP_WEIGHT = 10
+FULLTIME_WEIGHT = 8
+DEADLINE_WEIGHT = 30
+RECENCY_WEIGHT = 20
+ENGINEERING_MATCH_WEIGHT = 25
+COMPANY_PREFERENCE_WEIGHT = 10
+LOCATION_PREFERENCE_WEIGHT = 10
+
+
 @dataclass(slots=True)
 class WorkbookMapping:
     sheet_name: Optional[str] = None
@@ -53,6 +65,16 @@ class AppConfig:
     browser_timeout_ms: int = 15000
     max_companies: Optional[int] = None
     engineering_keywords: List[str] = field(default_factory=lambda: DEFAULT_ENGINEERING_KEYWORDS.copy())
+    priority_threshold: int = PRIORITY_THRESHOLD
+    preferred_companies: List[str] = field(default_factory=lambda: PREFERRED_COMPANIES.copy())
+    preferred_locations: List[str] = field(default_factory=lambda: PREFERRED_LOCATIONS.copy())
+    internship_weight: int = INTERNSHIP_WEIGHT
+    fulltime_weight: int = FULLTIME_WEIGHT
+    deadline_weight: int = DEADLINE_WEIGHT
+    recency_weight: int = RECENCY_WEIGHT
+    engineering_match_weight: int = ENGINEERING_MATCH_WEIGHT
+    company_preference_weight: int = COMPANY_PREFERENCE_WEIGHT
+    location_preference_weight: int = LOCATION_PREFERENCE_WEIGHT
     workbook_mapping: WorkbookMapping = field(default_factory=WorkbookMapping)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
     use_playwright_fallback: bool = False
