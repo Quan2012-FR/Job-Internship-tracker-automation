@@ -1,0 +1,14 @@
+2026-07-16 15:30:50,248 | INFO | Run started
+2026-07-16 15:30:50,248 | INFO | Input workbook: C:\Users\quan1\Documents\Coding Projects\Job Tracker\Job-Internship-tracker-automation-main\Job-Internship-tracker-automation-main\sample_data.xlsx
+2026-07-16 15:30:50,249 | INFO | Dashboard output: C:\Users\quan1\Documents\Coding Projects\Job Tracker\Job-Internship-tracker-automation-main\Job-Internship-tracker-automation-main\.smoke_dashboard_20260716.xlsx
+2026-07-16 15:30:50,249 | INFO | Database: C:\Users\quan1\Documents\Coding Projects\Job Tracker\Job-Internship-tracker-automation-main\Job-Internship-tracker-automation-main\.smoke_jobs.db
+2026-07-16 15:30:50,281 | INFO | Companies extracted: 1
+2026-07-16 15:30:50,375 | INFO | Processing company 1/1: Kodiak Robotics
+2026-07-16 15:30:50,375 | WARNING | No careers URL resolved for Kodiak Robotics at row 2
+2026-07-16 15:30:50,431 | INFO | Run finished
+2026-07-16 15:30:50,432 | INFO | End time: 2026-07-16T15:30:50
+2026-07-16 15:30:50,432 | INFO | Companies checked: 1
+2026-07-16 15:30:50,432 | INFO | Jobs found: 0
+2026-07-16 15:30:50,432 | INFO | New jobs: 0
+2026-07-16 15:30:50,432 | INFO | Jobs marked inactive: 0
+2026-07-16 15:30:50,432 | INFO | Errors encountered: 0
